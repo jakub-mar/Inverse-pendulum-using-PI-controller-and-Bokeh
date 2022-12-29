@@ -3,7 +3,7 @@ from bokeh.layouts import layout
 from math import sqrt
 from bokeh.plotting import figure, curdoc, ColumnDataSource
 from bokeh.io import show
-from bokeh.models import Button, Slider
+from bokeh.models import Button, Slider, NumericInput
 from bokeh.events import ButtonClick
 import math
 import numpy as np
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import copy
 
 
-def calculateInversePendulum(kp, Ti):
+def calculateInversePendulum(kp, Ti, targetValue):
     m = 0.05
     l = 0.15
     g = 9.81
@@ -29,14 +29,13 @@ def calculateInversePendulum(kp, Ti):
     Umax = 2
     Umin = -2
 
-    Theta_zad = -75
     tau = [0.0, 0.0]
     Theta = [90, 90, 90]
     e = [0.0, ]
     U = [0.0, ]
 
     for n in range(1, N):
-        e.append(Theta_zad-Theta[-1])
+        e.append(targetValue-Theta[-1])
         U.append(kp*(e[n]+(Tp/Ti))*sum(e))
         tau.append(U[n])
         t.append(n*Tp)
@@ -48,20 +47,34 @@ def calculateInversePendulum(kp, Ti):
 
 sliderTi = Slider(
     title="Ti value * 100",
-    start=0,
-    end=1,
-    step=0.05,
-    value=0.1
+    start=-0.9,
+    end=0.9,
+    step=0.1,
+    value=0.1,
+    width=600,
+    show_value=True
 )
+
 sliderkp = Slider(
-    title="kp value",
+    title="Kp value",
     start=0,
     end=0.3,
     step=0.01,
-    value=0.05
+    value=0.05,
+    width=600,
+    show_value=True
 )
-plot1 = figure(width=600, height=300)
-plot2 = figure(width=600, height=300)
+
+targetValueSlider = Slider(
+    title="Target angle",
+    start=-90,
+    end=90,
+    step=1,
+    value=-75
+)
+
+plot1 = figure(width=700, height=410)
+plot2 = figure(width=700, height=410)
 data = {'time': [0], 'angle': [0]}
 data2 = {'time': [0], 'angle': [0.0]}
 mainSource = ColumnDataSource(data)
@@ -76,7 +89,7 @@ prevPlot = plot2.line(x='time', y='angle', source=prevSource,
 def bokehPlot():
     global mainPlot, prevPlot, mainSource, prevSource
     doc = curdoc()
-    theta, t = calculateInversePendulum(0.05, 0.001)
+    theta, t = calculateInversePendulum(0.05, 0.001, -75)
 
     data = {}
     data["time"] = t
@@ -93,8 +106,8 @@ def bokehPlot():
 
     l = layout(
         [
-            [sliderTi],
-            [sliderkp],
+            [sliderTi, sliderkp],
+            [targetValueSlider],
             [plot1, plot2],
             [button]
         ]
@@ -106,7 +119,8 @@ def bokehPlot():
 
 def buttonCallback(new):
     global mainSource, prevPlot, mainPlot, prevSource
-    theta, t = calculateInversePendulum(sliderkp.value, sliderTi.value/100)
+    theta, t = calculateInversePendulum(
+        sliderkp.value, sliderTi.value/100, targetValueSlider.value)
 
     newData = {}
     newData["time"] = t
