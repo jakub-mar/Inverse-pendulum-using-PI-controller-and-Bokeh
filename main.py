@@ -5,73 +5,88 @@ from bokeh.plotting import figure, curdoc, ColumnDataSource
 from bokeh.io import show
 from bokeh.models import Button, Slider
 from bokeh.events import ButtonClick
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+import copy
 
 
-def calculateFunction(kp, Ti):
+def calculateInversePendulum(kp, Ti):
+    m = 0.05
+    l = 0.15
+    g = 9.81
+    b = 1.2
+    Tp = 0.1
+    t_sim = 10
 
-    A = 1.5  # max value in m^2
-    beta = 0.035  # m^(5/2)/s
-    t_sim = 3600  # simulation time
-    Tp = 0.1  # sampling time
-    t = [0.0]  # time array
-    N = int(t_sim/Tp)+1  # number of samples
-    h = [1]  # initial value
-    Qd = [0.05]
-    Qo = [beta*sqrt(h[-1])]
+    t = [-0.2, -0.1, 0.0, ]
+    N = int(t_sim/Tp) + 1
 
-    hmin = 0.0
-    hmax = 5.0
+    Theta_min = -90
+    Theta_max = 90
+    tau_max = 1
+    tau_min = -1
+    Umax = 2
+    Umin = -2
 
-    hz = [2.7]
-    e = [0.0]
-    u = [0.0]
-    dh = 0.03
+    Theta_zad = -75
+    tau = [0.0, 0.0]
+    Theta = [90, 90, 90]
+    e = [0.0, ]
+    U = [0.0, ]
 
-    for n in range(1, N+1):
-        t.append(n*Tp)  # simulation time calc
-        e.append(h[-1]-hz[-1])  # error
-        u.append(kp*(kp*(e[-1]+Tp/Ti*sum(e))))  # main function
-        Qd.append(A*hz[-1]*dh+beta*sqrt(h[-1]))
-        h.append(min(max(Tp*(Qd[-1]-Qo[-1])/A+h[-1], hmin), hmax))
-        Qo.append(beta*sqrt(h[-1]))
-    print("calc", h[1:10])
-    return t, h
+    for n in range(1, N):
+        e.append(Theta_zad-Theta[-1])
+        U.append(kp*(e[n]+(Tp/Ti))*sum(e))
+        tau.append(U[n])
+        t.append(n*Tp)
+        Theta.append(np.clip((Tp**2 * tau[-1] - 2*m*(l**2)*Theta[-1] + m*(
+            l**2)*Theta[-2] - m*g*l*np.sin(Theta[-1]))/(Tp*b - m*(l**2)), Theta_min, Theta_max))
+
+    return Theta, t
+
+
+sliderTi = Slider(
+    title="Ti value * 100",
+    start=0,
+    end=1,
+    step=0.05,
+    value=0.1
+)
+sliderkp = Slider(
+    title="kp value",
+    start=0,
+    end=0.3,
+    step=0.01,
+    value=0.05
+)
+plot1 = figure(width=600, height=300)
+plot2 = figure(width=600, height=300)
+data = {'time': [0], 'angle': [0]}
+data2 = {'time': [0], 'angle': [0.0]}
+mainSource = ColumnDataSource(data)
+prevSource = ColumnDataSource(data2)
+
+mainPlot = plot1.line(x='time', y='angle', source=mainSource,
+                      line_width=2, line_color="red")
+prevPlot = plot2.line(x='time', y='angle', source=prevSource,
+                      line_width=2, line_color="blue")
 
 
 def bokehPlot():
+    global mainPlot, prevPlot, mainSource, prevSource
     doc = curdoc()
-    t, h = calculateFunction(14, 1)
+    theta, t = calculateInversePendulum(0.05, 0.001)
 
     data = {}
     data["time"] = t
-    data["force"] = h
-    source = ColumnDataSource(data)
-    sliderTi = Slider(
-        title="Ti value",
-        start=0,
-        end=15,
-        step=0.1,
-        value=14
-    )
-    sliderkp = Slider(
-        title="kp value",
-        start=0,
-        end=3,
-        step=0.01,
-        value=0.01
-    )
-    p = figure(width=600, height=300)
-    points = p.line(x='time', y='force', source=source, line_width=2)
+    data["angle"] = theta
+    mainSource = ColumnDataSource(data)
 
-    def buttonCallback(new):
-        t, h = calculateFunction(sliderkp.value, sliderTi.value)
-
-        data = {}
-        data["time"] = t
-        data["force"] = h
-        source = ColumnDataSource(data)
-        p.line(x='time', y='force', source=source,
-               line_width=2, line_color="green")
+    mainPlot = plot1.line(x='time', y='angle', source=mainSource,
+                          line_width=2, line_color="red")
+    prevPlot = plot2.line(x='time', y='angle', source=prevSource,
+                          line_width=2, line_color="blue")
 
     button = Button(label="Generate plot", button_type="success")
     button.on_event(ButtonClick, buttonCallback)
@@ -80,7 +95,7 @@ def bokehPlot():
         [
             [sliderTi],
             [sliderkp],
-            [p],
+            [plot1, plot2],
             [button]
         ]
     )
@@ -89,6 +104,19 @@ def bokehPlot():
     # main operations
 
 
-# calculateFunction()
-# plotValues()
+def buttonCallback(new):
+    global mainSource, prevPlot, mainPlot, prevSource
+    theta, t = calculateInversePendulum(sliderkp.value, sliderTi.value/100)
+
+    newData = {}
+    newData["time"] = t
+    newData["angle"] = theta
+
+    prevSource.data = dict(mainSource.data)
+    mainSource.data = newData
+
+
 bokehPlot()
+
+
+# bokeh serve --show main.py
