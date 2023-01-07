@@ -2,14 +2,14 @@
 from bokeh.layouts import layout
 from bokeh.plotting import figure, curdoc, ColumnDataSource
 from bokeh.io import show
-from bokeh.models import Button, Slider, Span, PreText
+from bokeh.models import Button, Slider, Span, PreText, RangeSlider
 from bokeh.events import ButtonClick
 import numpy as np
 
 text = PreText(text='Autorzy: Jakub Marciniak, Szymon Sobczak')
 
 
-def calculateInversePendulum(kp, Ti, targetValue, t_sim):
+def calculateInversePendulum(kp, Ti, targetValue, t_sim, minMomentum=-1000, maxMomentum=1000):
     m = 0.05
     l = 0.15
     g = 9.81
@@ -34,7 +34,7 @@ def calculateInversePendulum(kp, Ti, targetValue, t_sim):
     for n in range(1, N):
         e.append(targetValue-Theta[-1])
         U.append(kp*(e[n]+(Tp/Ti))*sum(e))
-        tau.append(U[n])
+        tau.append(np.clip(U[n], minMomentum, maxMomentum))
         t.append(n*Tp)
         Theta.append(np.clip((Tp**2 * tau[-1] - 2*m*(l**2)*Theta[-1] + m*(
             l**2)*Theta[-2] - m*g*l*np.sin(Theta[-1]))/(Tp*b - m*(l**2)), Theta_min, Theta_max))
@@ -76,6 +76,10 @@ timeValueSlider = Slider(
     end=100,
     step=1,
     value=10
+)
+
+momentumRangeSlider = RangeSlider(
+    start=-1000, end=1000, value=(-1000, 1000), step=1, title="Zakres momentu"
 )
 
 plot1 = figure(width=700, height=410, title='Wykres regulacji kąta w czasie')
@@ -135,7 +139,8 @@ def bokehPlot():
 
     l = layout(
         [
-            [plot1, [sliderTi, sliderkp, targetValueSlider, timeValueSlider, button]],
+            [plot1, [sliderTi, sliderkp, targetValueSlider,
+                     timeValueSlider, momentumRangeSlider, button]],
             [plot2, plot3],
             [text]
         ]
@@ -148,7 +153,7 @@ def bokehPlot():
 def buttonCallback(new):
     global mainSource, prevPlot, mainPlot, prevSource, targetPlot, eSource, tauSource
     theta, t, e, u, tau = calculateInversePendulum(
-        sliderkp.value, sliderTi.value/100, targetValueSlider.value, timeValueSlider.value)
+        sliderkp.value, sliderTi.value/100, targetValueSlider.value, timeValueSlider.value, momentumRangeSlider.value[0], momentumRangeSlider.value[1])
 
     prevSource.data = dict(mainSource.data)
     mainSource.data = {'time': t, 'angle': theta}
