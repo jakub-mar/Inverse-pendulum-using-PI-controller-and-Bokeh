@@ -1,23 +1,20 @@
 # imports
 from bokeh.layouts import layout
-from math import sqrt
 from bokeh.plotting import figure, curdoc, ColumnDataSource
 from bokeh.io import show
-from bokeh.models import Button, Slider, NumericInput
+from bokeh.models import Button, Slider, Span, PreText
 from bokeh.events import ButtonClick
-import math
 import numpy as np
-import matplotlib.pyplot as plt
-import copy
+
+text = PreText(text='Autorzy: Jakub Marciniak, Szymon Sobczak')
 
 
-def calculateInversePendulum(kp, Ti, targetValue):
+def calculateInversePendulum(kp, Ti, targetValue, t_sim):
     m = 0.05
     l = 0.15
     g = 9.81
     b = 1.2
     Tp = 0.1
-    t_sim = 10
 
     t = [-0.2, -0.1, 0.0, ]
     N = int(t_sim/Tp) + 1
@@ -42,11 +39,11 @@ def calculateInversePendulum(kp, Ti, targetValue):
         Theta.append(np.clip((Tp**2 * tau[-1] - 2*m*(l**2)*Theta[-1] + m*(
             l**2)*Theta[-2] - m*g*l*np.sin(Theta[-1]))/(Tp*b - m*(l**2)), Theta_min, Theta_max))
 
-    return Theta, t
+    return Theta, t, e, U, tau
 
 
 sliderTi = Slider(
-    title="Ti value * 100",
+    title="Wartość Ti * 100",
     start=-0.9,
     end=0.9,
     step=0.1,
@@ -56,7 +53,7 @@ sliderTi = Slider(
 )
 
 sliderkp = Slider(
-    title="Kp value",
+    title="Wartość Kp",
     start=0,
     end=0.3,
     step=0.01,
@@ -66,50 +63,81 @@ sliderkp = Slider(
 )
 
 targetValueSlider = Slider(
-    title="Target angle",
+    title="Kąt zadany",
     start=-90,
     end=90,
     step=1,
     value=-75
 )
 
-plot1 = figure(width=700, height=410)
-plot2 = figure(width=700, height=410)
-data = {'time': [0], 'angle': [0]}
-data2 = {'time': [0], 'angle': [0.0]}
-mainSource = ColumnDataSource(data)
-prevSource = ColumnDataSource(data2)
+timeValueSlider = Slider(
+    title="Czas symulacji",
+    start=0,
+    end=100,
+    step=1,
+    value=10
+)
+
+plot1 = figure(width=700, height=410, title='Wykres regulacji kąta w czasie')
+plot1.xaxis.axis_label = 'Czas [s]'
+plot1.yaxis.axis_label = 'Theta [deg]'
+
+plot2 = figure(width=500, height=270, title='Wykres uchybu')
+plot2.xaxis.axis_label = 'Czas [s]'
+plot2.yaxis.axis_label = 'Wartość uchybu'
+
+plot3 = figure(width=500, height=270, title='Wykres momentu napędowego')
+plot3.xaxis.axis_label = 'Czas [s]'
+plot3.yaxis.axis_label = 'Moment napędowy [Nm]'
+
+tauSource = ColumnDataSource({"time": [0.0], "tau": [0.0]})
+eSource = ColumnDataSource({"time": [0.0], "e": [0.0]})
+mainSource = ColumnDataSource({'time': [0], 'angle': [0]})
+prevSource = ColumnDataSource({'time': [0], 'angle': [0]})
+
 
 mainPlot = plot1.line(x='time', y='angle', source=mainSource,
-                      line_width=2, line_color="red")
-prevPlot = plot2.line(x='time', y='angle', source=prevSource,
-                      line_width=2, line_color="blue")
+                      line_width=2, line_color="red", legend_label='Aktualna regulacja')
+prevPlot = plot1.line(x='time', y='angle', source=prevSource,
+                      line_width=2, line_color="blue", legend_label='Poprzednia regulacja')
+
+targetPlot = Span(location=targetValueSlider.value,
+                  dimension='width', line_color='green',
+                  line_dash='dashed', line_width=1)
+
+eplot = plot2.line(x='time', y='e', source=eSource)
+
+tauPlot = plot3.line(x='time', y='tau', source=tauSource)
+
+plot1.line([0], [0], legend_label='Kąt zadany',
+           line_dash='dashed', line_color="green", line_alpha=1)
+plot1.add_layout(targetPlot)
 
 
 def bokehPlot():
-    global mainPlot, prevPlot, mainSource, prevSource
+    global mainPlot, prevPlot, mainSource, prevSource, targetPlot, eplot, eSource, tauPlot, tauSource
     doc = curdoc()
-    theta, t = calculateInversePendulum(0.05, 0.001, -75)
+    theta, t, e, U, tau = calculateInversePendulum(0.05, 0.001, -75, 10)
 
-    data = {}
-    data["time"] = t
-    data["angle"] = theta
-    mainSource = ColumnDataSource(data)
+    mainSource = ColumnDataSource({"time": t, "angle": theta})
+    eSource = ColumnDataSource({"time": t, "e": e})
+    tauSource = ColumnDataSource({"time": t, "tau": tau})
 
     mainPlot = plot1.line(x='time', y='angle', source=mainSource,
-                          line_width=2, line_color="red")
-    prevPlot = plot2.line(x='time', y='angle', source=prevSource,
-                          line_width=2, line_color="blue")
+                          line_width=2, line_color="red", legend_label='Aktualna regulacja')
+    prevPlot = plot1.line(x='time', y='angle', source=prevSource,
+                          line_width=2, line_color="blue", legend_label='Poprzednia regulacja')
+    eplot = plot2.line(x='time', y='e', source=eSource)
+    tauPlot = plot3.line(x='time', y='tau', source=tauSource)
 
     button = Button(label="Generate plot", button_type="success")
     button.on_event(ButtonClick, buttonCallback)
 
     l = layout(
         [
-            [sliderTi, sliderkp],
-            [targetValueSlider],
-            [plot1, plot2],
-            [button]
+            [plot1, [sliderTi, sliderkp, targetValueSlider, timeValueSlider, button]],
+            [plot2, plot3],
+            [text]
         ]
     )
     doc.add_root(l)
@@ -118,16 +146,15 @@ def bokehPlot():
 
 
 def buttonCallback(new):
-    global mainSource, prevPlot, mainPlot, prevSource
-    theta, t = calculateInversePendulum(
-        sliderkp.value, sliderTi.value/100, targetValueSlider.value)
-
-    newData = {}
-    newData["time"] = t
-    newData["angle"] = theta
+    global mainSource, prevPlot, mainPlot, prevSource, targetPlot, eSource, tauSource
+    theta, t, e, u, tau = calculateInversePendulum(
+        sliderkp.value, sliderTi.value/100, targetValueSlider.value, timeValueSlider.value)
 
     prevSource.data = dict(mainSource.data)
-    mainSource.data = newData
+    mainSource.data = {'time': t, 'angle': theta}
+    eSource.data = {'time': t, 'e': e}
+    tauSource.data = {'time': t, 'tau': tau}
+    targetPlot.location = targetValueSlider.value
 
 
 bokehPlot()
